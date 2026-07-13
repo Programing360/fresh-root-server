@@ -1,7 +1,6 @@
+import express, { type Request, type Response } from "express";
 
-import express, { type Request, type Response}  from 'express';
-
-import { MongoClient, ServerApiVersion, ObjectId } from 'mongodb';
+import { MongoClient, ServerApiVersion, ObjectId } from "mongodb";
 import cors from "cors";
 import * as dotenv from "dotenv";
 
@@ -30,16 +29,76 @@ async function run() {
     const db = client.db("fresh_root");
     const productCollection = db.collection("products");
 
+    app.get("/products", async (req: Request, res: Response) => {
+      const result = await productCollection.find().toArray();
+      res.send(result);
+    });
 
-    app.get('/products', async(req: Request, res: Response) => {
-      const result = await productCollection.find().toArray()
+    // product get by Id---------------------------------------------------------------
+    app.get("/product/:id", async (req: Request, res: Response) => {
+      try {
+        const id = req.params.id;
+
+        if (!id || typeof id !== "string" || !ObjectId.isValid(id)) {
+          return res.status(400).json({ message: "Invalid product ID" });
+        }
+
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).json({ message: "Invalid product ID" });
+        }
+
+        const result = await productCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!result) {
+          return res.status(404).json({ message: "Product not found" });
+        }
+
+        res.status(200).json(result);
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Internal server error" });
+      }
+    });
+
+    // porduct add api ---------------------------------------------------
+
+    app.post("/api/item/add", async (req: Request, res: Response) => {
+      const data = req.body;
+      const newData = {
+        ...data,
+        createAt: new Date(),
+      };
+
+      const result = await productCollection.insertOne(newData);
+      res.send(result);
+    });
+
+    // product delete api -------------------------------------------------
+
+    app.delete("/api/delete/:id", async (req: Request, res: Response) => {
+      const id = req.params.id;
+
+      if (!id || typeof id !== "string" || !ObjectId.isValid(id)) {
+        return res.status(400).json({ message: "Invalid product ID" });
+      }
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ message: "Invalid product ID" });
+      }
+
+      const query = { _id: new ObjectId(id) };
+
+      const result = await productCollection.deleteOne(query)
       res.send(result)
-    })
 
-
+    });
 
     await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    console.log(
+      "Pinged your deployment. You successfully connected to MongoDB!",
+    );
 
     app.get("/", async (req: Request, res: Response) => {
       res.send("Server is running successfully 🚀");
