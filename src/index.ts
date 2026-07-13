@@ -1,8 +1,18 @@
-import express, { type Request, type Response } from "express";
+import express, {
+  type NextFunction,
+  type Request,
+  type Response,
+} from "express";
 
-import { MongoClient, ServerApiVersion, ObjectId } from "mongodb";
+import {
+  MongoClient,
+  ServerApiVersion,
+  ObjectId,
+  type WithId,
+  type Document,
+} from "mongodb";
 import cors from "cors";
-import * as dotenv from "dotenv";
+import dotenv from "dotenv";
 
 dotenv.config();
 
@@ -22,12 +32,73 @@ const client = new MongoClient(uri, {
   },
 });
 
+declare global {
+  namespace Express {
+    interface Request {
+      user?: WithId<Document> | null;
+    }
+  }
+}
+
+app.get("/", async (req: Request, res: Response) => {
+  res.send("Server is running successfully 🚀");
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
+
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
 
     const db = client.db("fresh_root");
     const productCollection = db.collection("products");
+    const userCollection = db.collection("user");
+
+    // Verification Center----------------------------------------------------
+    const verifyToken = async (
+      req: Request,
+      res: Response,
+      next: NextFunction,
+    ) => {
+      const authHeader = req.headers.authorization;
+
+      if (!authHeader) {
+        return res.status(401).send({ message: "unauthorize access" });
+      }
+      const token = authHeader.split(" ")[1];
+      if (!token) {
+        return res.status(401).send({ message: "unauthorize access" });
+      }
+
+      const query = { token: token };
+
+      const session = await userCollection.findOne(query);
+
+      const userId = session?.userId;
+      const user = await userCollection.findOne({
+        _id: userId,
+      });
+
+      req.user = user;
+
+      next();
+    };
+
+    // const verifyUser = (req: Request, res: Response, next: NextFunction) => {
+    //   if (req.user?.role !== "user" && req.user?.role !== "admin") {
+    //     return res.status(403).send({ message: "forbidden access" });
+    //   }
+    //   next();
+    // };
+
+    // const verifyAdmin = (req: Request, res: Response, next: NextFunction) => {
+    //   if (req.user?.role !== "admin") {
+    //     return res.status(403).send({ message: "forbidden access" });
+    //   }
+    //   next();
+    // };
 
     app.get("/products", async (req: Request, res: Response) => {
       const result = await productCollection.find().toArray();
@@ -35,61 +106,70 @@ async function run() {
     });
 
     // product get by Id---------------------------------------------------------------
-    app.get("/product/:id", async (req: Request, res: Response) => {
-      try {
-        const id = req.params.id;
+    app.get(
+      "/product/:id",
+      verifyToken,
+      async (req: Request, res: Response) => {
+        try {
+          const id = req.params.id;
 
-        if (!id || typeof id !== "string" || !ObjectId.isValid(id)) {
-          return res.status(400).json({ message: "Invalid product ID" });
+          if (!id || typeof id !== "string" || !ObjectId.isValid(id)) {
+            return res.status(400).json({ message: "Invalid product ID" });
+          }
+
+          // if (!ObjectId.isValid(id)) {
+          //   return res.status(400).json({ message: "Invalid product ID" });
+          // }
+
+          const result = await productCollection.findOne({
+            _id: new ObjectId(id),
+          });
+
+          if (!result) {
+            return res.status(404).json({ message: "Product not found" });
+          }
+
+          res.status(200).json(result);
+        } catch (err) {
+          console.error(err);
+          res.status(500).json({ message: "Internal server error" });
         }
-
-        if (!ObjectId.isValid(id)) {
-          return res.status(400).json({ message: "Invalid product ID" });
-        }
-
-        const result = await productCollection.findOne({
-          _id: new ObjectId(id),
-        });
-
-        if (!result) {
-          return res.status(404).json({ message: "Product not found" });
-        }
-
-        res.status(200).json(result);
-      } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: "Internal server error" });
-      }
-    });
+      },
+    );
 
     // porduct add api ---------------------------------------------------
 
-    app.post("/api/item/add", async (req: Request, res: Response) => {
-      const data = req.body;
-      const newData = {
-        ...data,
-        createAt: new Date(),
-      };
+    app.post(
+      "/api/item/add",
+      verifyToken,
+      async (req: Request, res: Response) => {
+        const data = req.body;
+        const newData = {
+          ...data,
+          createAt: new Date(),
+        };
 
-      const result = await productCollection.insertOne(newData);
-      res.send(result);
-    });
+        const result = await productCollection.insertOne(newData);
+        res.send(result);
+      },
+    );
 
     // product Update api ------------------------------------------------
 
     app.patch(
       "/api/product-update/:id",
+      verifyToken,
       async (req: Request, res: Response) => {
         const id = req.params.id;
         const updateData = req.body;
-        delete updateData._id; // _id কখনো update করা যাবে না
+        delete updateData._id;
         if (!id || typeof id !== "string" || !ObjectId.isValid(id)) {
           return res.status(400).json({ message: "Invalid product ID" });
         }
 
-        if (!ObjectId.isValid(id)) {
-          return res.status(400).json({ message: "Invalid product ID" });
-        }
+        // if (!ObjectId.isValid(id)) {
+        //   return res.status(400).json({ message: "Invalid product ID" });
+        // }
 
         const query = { _id: new ObjectId(id) };
 
@@ -108,38 +188,36 @@ async function run() {
 
     // product delete api -------------------------------------------------
 
-    app.delete("/api/delete/:id", async (req: Request, res: Response) => {
-      const id = req.params.id;
+    app.delete(
+      "/api/delete/:id",
+      verifyToken,
+      async (req: Request, res: Response) => {
+        const id = req.params.id;
 
-      if (!id || typeof id !== "string" || !ObjectId.isValid(id)) {
-        return res.status(400).json({ message: "Invalid product ID" });
-      }
+        if (!id || typeof id !== "string" || !ObjectId.isValid(id)) {
+          return res.status(400).json({ message: "Invalid product ID" });
+        }
 
-      if (!ObjectId.isValid(id)) {
-        return res.status(400).json({ message: "Invalid product ID" });
-      }
+        // if (!ObjectId.isValid(id)) {
+        //   return res.status(400).json({ message: "Invalid product ID" });
+        // }
 
-      const query = { _id: new ObjectId(id) };
+        const query = { _id: new ObjectId(id) };
 
-      const result = await productCollection.deleteOne(query);
-      res.send(result);
-    });
+        const result = await productCollection.deleteOne(query);
+        res.send(result);
+      },
+    );
 
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
     );
-
-    app.get("/", async (req: Request, res: Response) => {
-      res.send("Server is running successfully 🚀");
-    });
-
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-    });
   } catch (err) {
     console.error(err);
   }
 }
 
 run().catch(console.dir);
+
+export default app;
