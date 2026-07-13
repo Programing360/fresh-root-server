@@ -75,6 +75,37 @@ async function run() {
       res.send(result);
     });
 
+    // product Update api ------------------------------------------------
+
+    app.patch(
+      "/api/product-update/:id",
+      async (req: Request, res: Response) => {
+        const id = req.params.id;
+        const updateData = req.body;
+        delete updateData._id; // _id কখনো update করা যাবে না
+        if (!id || typeof id !== "string" || !ObjectId.isValid(id)) {
+          return res.status(400).json({ message: "Invalid product ID" });
+        }
+
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).json({ message: "Invalid product ID" });
+        }
+
+        const query = { _id: new ObjectId(id) };
+
+        const updateInfo = {
+          $set: updateData,
+        };
+
+        const result = await productCollection.updateOne(query, updateInfo);
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ message: "Product not found" });
+        }
+
+        res.send(result);
+      },
+    );
+
     // product delete api -------------------------------------------------
 
     app.delete("/api/delete/:id", async (req: Request, res: Response) => {
@@ -90,9 +121,8 @@ async function run() {
 
       const query = { _id: new ObjectId(id) };
 
-      const result = await productCollection.deleteOne(query)
-      res.send(result)
-
+      const result = await productCollection.deleteOne(query);
+      res.send(result);
     });
 
     await client.db("admin").command({ ping: 1 });
