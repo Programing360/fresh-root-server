@@ -17,7 +17,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+// const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
@@ -44,9 +44,13 @@ app.get("/", async (req: Request, res: Response) => {
   res.send("Server is running successfully 🚀");
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+if (process.env.NODE_ENV !== "production") {
+  const PORT = process.env.PORT || 5000;
+
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
 
 async function run() {
   try {
@@ -108,7 +112,7 @@ async function run() {
     // product get by Id---------------------------------------------------------------
     app.get(
       "/product/:id",
-      verifyToken,
+
       async (req: Request, res: Response) => {
         try {
           const id = req.params.id;
