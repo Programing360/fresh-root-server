@@ -105,7 +105,32 @@ async function run() {
     // };
 
     app.get("/products", async (req: Request, res: Response) => {
-      const result = await productCollection.find().toArray();
+      const { category, sort, search } = req.query;
+
+      const queryObj: any = {};
+      
+      if (category && typeof category === "string") {
+        queryObj.category = category;
+      }
+
+      if (search && typeof search === "string") {
+        queryObj.title = { $regex: search, $options: "i" };
+      }
+
+      let sortObj: any = {};
+
+      if (sort === "low-to-high") {
+        sortObj.price = 1;
+      } else if (sort === "high-to-low") {
+        sortObj.price = -1;
+      } else if (sort === "rating") {
+        sortObj.rating = -1;
+      } else {
+        sortObj.createdAt = -1;
+      }
+
+      const result = await productCollection.find(queryObj).sort(sortObj).toArray();
+
       res.send(result);
     });
 
